@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /households/{code} {
+      function isMember() {
+        return request.auth != null &&
+          request.auth.uid in get(/databases/$(database)/documents/households/$(code)).data.members;
+      }
+
+      // Alleen leden mogen het huishouden zien
+      allow get: if request.auth != null && request.auth.uid in resource.data.members;
+
+      // Nieuw huishouden: je zet alleen jezelf erin
+      allow create: if request.auth != null &&
+        request.resource.data.members == [request.auth.uid];
+
+      // Wie de code kent mag zichzelf toevoegen (of zichzelf weer weghalen)
+      allow update: if request.auth != null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
+        request.resource.data.members.hasAll(resource.data.members.removeAll([request.auth.uid])) &&
+        request.resource.data.members.removeAll(resource.data.members).hasOnly([request.auth.uid]);
+
+      // Lijsten, producten en geschiedenis: alleen voor leden
+      match /{sub=**} {
+        allow read, write: if isMember();
+      }
+    }
+  }
+}
