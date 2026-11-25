@@ -3,7 +3,7 @@
 Gedeelde boodschappenlijst voor Android. Meerdere lijsten + "Alles", indeling per categorie,
 slimme suggesties tijdens het typen, aantallen en grammen, live gesynchroniseerd via Firebase.
 
-**Installeren:** https://github.com/mijnmailfilter-cell/Boodschappie/releases/latest/download/Boodschappie.apk
+**Installeren:** https://github.com/mijnmailfilter-cell/Boodschappen/releases/latest/download/Boodschappie.apk
 
 ## Eenmalige Firebase-setup
 1. Firebase-project aanmaken, Android-app toevoegen met pakketnaam `nl.vliegendaapje.boodschappie`.
