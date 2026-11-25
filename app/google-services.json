@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "635951746669",
+    "project_id": "boodschappen-8f7cb",
+    "storage_bucket": "boodschappen-8f7cb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:635951746669:android:c7965a746b5626cf867964",
+        "android_client_info": {
+          "package_name": "nl.vliegendaapje.boodschappie"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMTvdMbANVeYQOZW-s5zrrXTwJfbbOc9I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
