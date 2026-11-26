@@ -47,6 +47,8 @@ import nl.vliegendaapje.boodschappie.data.QtyParser
 import nl.vliegendaapje.boodschappie.data.Suggest
 import nl.vliegendaapje.boodschappie.ui.BoodschappieTheme
 import nl.vliegendaapje.boodschappie.ui.SuggestionRow
+import nl.vliegendaapje.boodschappie.ui.ListeningBar
+import nl.vliegendaapje.boodschappie.ui.rememberVoiceInput
 
 /** Klein invoervenster over het beginscherm (vanaf de widget). */
 class QuickAddActivity : ComponentActivity() {
@@ -90,30 +92,32 @@ private fun QuickAddScreen(startVoice: Boolean, listId: String?, onClose: () -> 
     var voiceStarted by rememberSaveable { mutableStateOf(false) }
     val added = remember { mutableStateListOf<String>() }
     var typedSomething by remember { mutableStateOf(false) }
-    var noVoice by remember { mutableStateOf(false) }
 
     LaunchedEffect(target) { vm.quickTarget = target }
 
     val sorted = remember(lists) { lists.sortedBy { it.order } }
     val shownTarget = target?.takeIf { t -> sorted.any { it.id == t } } ?: vm.effectiveTarget()
 
-    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        val spoken = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (res.resultCode == Activity.RESULT_OK && !spoken.isNullOrBlank()) {
-            scope.launch {
-                vm.awaitReady()
-                added += vm.addSpoken(spoken)
-                if (startVoice && !typedSomething) {
-                    delay(1800); onClose()
-                }
+    val (voice, beginVoice) = rememberVoiceInput { spoken ->
+        scope.launch {
+            vm.awaitReady()
+            added += vm.addSpoken(spoken)
+            if (startVoice && !typedSomething) {
+                delay(1600); onClose()
             }
-        } else {
-            runCatching { focus.requestFocus(); keyboard?.show() }
+        }
+    }
+    // mislukt of geannuleerd vanaf de widget: dan maar typen
+    LaunchedEffect(voice.listening, voice.error) {
+        if (startVoice && voiceStarted && !voice.listening) {
+            delay(700)
+            if (added.isEmpty() && !voice.listening) runCatching { focus.requestFocus(); keyboard?.show() }
         }
     }
 
     fun launchVoice() {
-        runCatching { voiceLauncher.launch(speechIntent()) }.onFailure { noVoice = true }
+        keyboard?.hide()
+        beginVoice()
     }
 
     LaunchedEffect(Unit) {
@@ -171,8 +175,8 @@ private fun QuickAddScreen(startVoice: Boolean, listId: String?, onClose: () -> 
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
-                if (noVoice) {
-                    Text("Inspreken is niet beschikbaar op dit toestel.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                voice.error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 6.dp))
                 }
 
                 if (sorted.size > 1) {
@@ -204,7 +208,9 @@ private fun QuickAddScreen(startVoice: Boolean, listId: String?, onClose: () -> 
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                if (voice.listening) {
+                    ListeningBar(voice, Modifier.padding(top = 6.dp))
+                } else Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
                     TextField(
                         value = text,
                         onValueChange = { text = it },

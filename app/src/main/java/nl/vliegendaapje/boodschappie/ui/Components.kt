@@ -44,12 +44,7 @@ import nl.vliegendaapje.boodschappie.data.QtyParser
 import nl.vliegendaapje.boodschappie.data.ShopList
 import nl.vliegendaapje.boodschappie.data.Suggest
 import nl.vliegendaapje.boodschappie.data.Suggestion
-import nl.vliegendaapje.boodschappie.speechIntent
 import nl.vliegendaapje.boodschappie.widget.initialColor
-import android.app.Activity
-import android.speech.RecognizerIntent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 
 // ---------------------------------------------------------------- product-rij
 
@@ -261,10 +256,7 @@ fun AddBar(
     onSpoken: (String) -> Unit,
 ) {
     var text by rememberSaveable { mutableStateOf("") }
-    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        val spoken = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (res.resultCode == Activity.RESULT_OK && !spoken.isNullOrBlank()) onSpoken(spoken)
-    }
+    val (voice, startVoice) = rememberVoiceInput(onSpoken)
     var focused by remember { mutableStateOf(false) }
     val parsed = remember(text) { QtyParser.parse(text) }
     val suggestions = remember(parsed.name, history) { Suggest.search(parsed.name, history) }
@@ -344,7 +336,19 @@ fun AddBar(
                 }
             }
 
-            Row(
+            voice.error?.let { msg ->
+                LaunchedEffect(msg) { kotlinx.coroutines.delay(3000); voice.error = null }
+                Text(
+                    msg,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 20.dp, top = 8.dp),
+                )
+            }
+
+            if (voice.listening) {
+                ListeningBar(voice, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+            } else Row(
                 Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -371,7 +375,7 @@ fun AddBar(
                 Spacer(Modifier.width(8.dp))
                 if (text.isBlank()) {
                     FilledTonalIconButton(
-                        onClick = { runCatching { voiceLauncher.launch(speechIntent()) } },
+                        onClick = startVoice,
                         modifier = Modifier.size(54.dp),
                     ) { Text("🎤", fontSize = 22.sp) }
                 } else {
