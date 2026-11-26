@@ -8,7 +8,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.glance.ColorFilter
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.appwidget.GlanceAppWidgetManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import nl.vliegendaapje.boodschappie.R
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.action.ActionParameters
@@ -58,6 +71,7 @@ import nl.vliegendaapje.boodschappie.data.Repo
 import nl.vliegendaapje.boodschappie.data.ShopList
 
 private val KEY_LIST = stringPreferencesKey("widget_list")
+private val KEY_REV = longPreferencesKey("widget_rev")
 private val P_ITEM = ActionParameters.Key<String>("item")
 private val P_CHECKED = ActionParameters.Key<Boolean>("checked")
 private val P_LIST = ActionParameters.Key<String>("list")
@@ -92,8 +106,38 @@ class BoodschappieWidget : GlanceAppWidget() {
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val snap = WidgetData.load(context)
-        provideContent { WidgetContent(context, snap) }
+        val first = WidgetData.load(context)
+        provideContent {
+            // bij elke "rev"-ophoging opnieuw ophalen, zodat de widget echt ververst
+            val rev = currentState<Preferences>()[KEY_REV] ?: 0L
+            val snap by produceState(first, rev) { if (rev != 0L) value = WidgetData.load(context) }
+            WidgetContent(context, snap)
+        }
+    }
+}
+
+/** Ververs alle Boodschappie-widgets (haalt de lijst opnieuw op). */
+object WidgetRefresher {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    suspend fun refreshAll(context: Context) {
+        val manager = GlanceAppWidgetManager(context)
+        val widget = BoodschappieWidget()
+        runCatching {
+            manager.getGlanceIds(BoodschappieWidget::class.java).forEach { id ->
+                updateAppWidgetState(context, id) { it[KEY_REV] = System.currentTimeMillis() }
+                widget.update(context, id)
+            }
+        }
+    }
+
+    /** Ook als het scherm/venster al dicht is (los van de levensduur van een Activity). */
+    fun refreshSoon(context: Context, delayMs: Long = 600) {
+        val app = context.applicationContext
+        appScope.launch {
+            delay(delayMs)
+            refreshAll(app)
+        }
     }
 }
 
@@ -145,6 +189,18 @@ private fun WidgetContent(context: Context, snap: WidgetSnapshot) {
                 RoundButton("🎤", actionStartActivity(quickIntent(context, true, listId)))
                 Spacer(GlanceModifier.width(6.dp))
                 RoundButton("＋", actionStartActivity(quickIntent(context, false, listId)))
+            }
+            Spacer(GlanceModifier.width(4.dp))
+            Box(
+                GlanceModifier.size(30.dp).cornerRadius(15.dp).clickable(actionStartActivity<MainActivity>()),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_open_app),
+                    contentDescription = "App openen",
+                    colorFilter = ColorFilter.tint(cDim),
+                    modifier = GlanceModifier.size(18.dp),
+                )
             }
         }
 
@@ -255,14 +311,17 @@ class ToggleItemAction : ActionCallback {
         val checked = parameters[P_CHECKED] ?: return
         val code = context.getSharedPreferences("boodschappie", Context.MODE_PRIVATE).getString("household", null) ?: return
         Repo().updateItemAwait(code, id, mapOf("checked" to checked, "checkedAt" to System.currentTimeMillis()))
-        BoodschappieWidget().updateAll(context)
+        WidgetRefresher.refreshAll(context)
     }
 }
 
 class CycleListAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val next = parameters[P_LIST] ?: ALL
-        updateAppWidgetState(context, glanceId) { it[KEY_LIST] = next }
+        updateAppWidgetState(context, glanceId) {
+            it[KEY_LIST] = next
+            it[KEY_REV] = System.currentTimeMillis()
+        }
         BoodschappieWidget().update(context, glanceId)
     }
 }

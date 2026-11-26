@@ -18,6 +18,7 @@ import nl.vliegendaapje.boodschappie.ui.OnboardingScreen
 import nl.vliegendaapje.boodschappie.ui.SettingsScreen
 import nl.vliegendaapje.boodschappie.widget.Notifier
 import nl.vliegendaapje.boodschappie.widget.SyncWorker
+import nl.vliegendaapje.boodschappie.widget.WidgetRefresher
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         SyncWorker.markSeen(this)
+        WidgetRefresher.refreshSoon(this)
     }
 }
 

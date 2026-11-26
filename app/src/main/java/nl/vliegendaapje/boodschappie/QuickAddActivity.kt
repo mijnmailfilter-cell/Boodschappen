@@ -64,6 +64,13 @@ class QuickAddActivity : ComponentActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        // widget direct bijwerken met wat er net is toegevoegd
+        nl.vliegendaapje.boodschappie.widget.WidgetRefresher.refreshSoon(this, 800)
+        nl.vliegendaapje.boodschappie.widget.WidgetRefresher.refreshSoon(this, 3500)
+    }
+
     companion object {
         const val EXTRA_VOICE = "voice"
         const val EXTRA_LIST = "list"

@@ -11,7 +11,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.glance.appwidget.updateAll
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -47,7 +46,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
         prefs.edit().putLong(KEY_LAST_SEEN, now).apply()
 
-        runCatching { BoodschappieWidget().updateAll(ctx) }
+        WidgetRefresher.refreshAll(ctx)
         return Result.success()
     }
 

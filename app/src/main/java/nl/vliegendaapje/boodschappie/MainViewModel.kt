@@ -12,8 +12,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import nl.vliegendaapje.boodschappie.data.VoiceParser
-import nl.vliegendaapje.boodschappie.widget.BoodschappieWidget
-import androidx.glance.appwidget.updateAll
+import nl.vliegendaapje.boodschappie.widget.WidgetRefresher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -78,7 +77,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // widget bijwerken zodra de lijst verandert
         viewModelScope.launch {
             items.drop(1).debounce(1200).collect {
-                runCatching { BoodschappieWidget().updateAll(getApplication()) }
+                WidgetRefresher.refreshAll(getApplication())
             }
         }
     }
