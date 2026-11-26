@@ -182,7 +182,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ingesproken tekst -> losse producten. Geeft de toegevoegde regels terug. */
     fun addSpoken(spoken: String): List<String> {
-        val parts = VoiceParser.split(spoken)
+        val known = history.value.map { Suggest.norm(it.name) }.toHashSet()
+        val parts = VoiceParser.split(spoken) { name -> Catalog.find(name) != null || Suggest.norm(name) in known }
         parts.forEach { addFromText(it) }
         return parts
     }
