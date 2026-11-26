@@ -30,6 +30,9 @@ import nl.vliegendaapje.boodschappie.data.ShopList
 @Composable
 fun SettingsScreen(vm: MainViewModel, code: String, onBack: () -> Unit, onLeave: () -> Unit) {
     val lists by vm.lists.collectAsStateWithLifecycle()
+    val myName by vm.myName.collectAsStateWithLifecycle()
+    val notify by vm.notify.collectAsStateWithLifecycle()
+    var editName by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val pretty = Codes.pretty(code)
@@ -134,6 +137,29 @@ fun SettingsScreen(vm: MainViewModel, code: String, onBack: () -> Unit, onLeave:
             }
 
             Spacer(Modifier.height(28.dp))
+            Text("Jij", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                ListItem(
+                    headlineContent = { Text("Jouw naam") },
+                    supportingContent = { Text(myName.ifBlank { "Nog niet ingevuld" }) },
+                    leadingContent = { if (myName.isNotBlank()) InitialBubble(myName.take(1).uppercase(), myName) },
+                    trailingContent = { IconButton(onClick = { editName = true }) { Icon(Icons.Filled.Edit, "Wijzigen") } },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                )
+                ListItem(
+                    headlineContent = { Text("Meldingen") },
+                    supportingContent = { Text("Seintje als de ander iets toevoegt (kan tot een kwartier duren)") },
+                    trailingContent = { Switch(checked = notify, onCheckedChange = { vm.setNotify(it) }) },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                )
+            }
+
+            Spacer(Modifier.height(28.dp))
             Text("Handig om te weten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             Text(
@@ -141,6 +167,8 @@ fun SettingsScreen(vm: MainViewModel, code: String, onBack: () -> Unit, onLeave:
                     "• Tik op een product om het af te vinken.\n" +
                     "• Houd een product vast (of tik op het aantal) om het aan te passen of een andere categorie te kiezen. De app onthoudt dat voor de volgende keer.\n" +
                     "• Veeg naar links om te verwijderen.\n" +
+                    "• Tik op 🎤 en zeg bijv. \"melk, drie bananen en een pond gehakt\".\n" +
+                    "• Widget: houd je beginscherm ingedrukt → Widgets → Boodschappie. Tik op de lijstnaam in de widget om van lijst te wisselen.\n" +
                     "• Werkt ook zonder bereik in de winkel; alles synchroniseert zodra je weer verbinding hebt.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -162,6 +190,9 @@ fun SettingsScreen(vm: MainViewModel, code: String, onBack: () -> Unit, onLeave:
         }
     }
 
+    if (editName) {
+        NameDialog("Jouw naam", myName, "Opslaan", { vm.setName(it); editName = false }, { editName = false }, placeholder = "Je voornaam")
+    }
     if (newList) NameDialog("Nieuwe lijst", "", "Maken", { vm.addList(it); newList = false }, { newList = false })
     renaming?.let { l ->
         NameDialog("Lijst hernoemen", l.name, "Opslaan", { vm.renameList(l.id, it); renaming = null }, { renaming = null })

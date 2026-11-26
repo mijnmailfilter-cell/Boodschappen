@@ -6,6 +6,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -21,6 +23,8 @@ class Repo {
     private fun lists(code: String) = hh(code).collection("lists")
     private fun items(code: String) = hh(code).collection("items")
     private fun history(code: String) = hh(code).collection("history")
+
+    fun uid(): String? = auth.currentUser?.uid
 
     suspend fun ensureSignedIn(): String =
         auth.currentUser?.uid ?: auth.signInAnonymously().await().user!!.uid
@@ -71,12 +75,11 @@ class Repo {
             awaitClose { reg.remove() }
         }
 
-    fun listsFlow(code: String): Flow<List<ShopList>> = live(lists(code)) { d ->
-        ShopList(d.id, d.getString("name") ?: "Lijst", d.getLong("order") ?: 0)
-    }
+    private fun toList(d: DocumentSnapshot) = ShopList(d.id, d.getString("name") ?: "Lijst", d.getLong("order") ?: 0)
 
-    fun itemsFlow(code: String): Flow<List<Item>> = live(items(code)) { d ->
-        Item(
+    private fun toItem(d: DocumentSnapshot): Item {
+        val created = d.getLong("createdAt") ?: 0
+        return Item(
             id = d.id,
             listId = d.getString("listId") ?: "",
             name = d.getString("name") ?: "",
@@ -85,8 +88,29 @@ class Repo {
             unit = d.getString("unit") ?: "st",
             checked = d.getBoolean("checked") ?: false,
             checkedAt = d.getLong("checkedAt") ?: 0,
-            createdAt = d.getLong("createdAt") ?: 0,
+            createdAt = created,
+            byUid = d.getString("byUid") ?: "",
+            byName = d.getString("byName") ?: "",
+            addedAt = d.getLong("addedAt") ?: created,
         )
+    }
+
+    fun listsFlow(code: String): Flow<List<ShopList>> = live(lists(code), ::toList)
+    fun itemsFlow(code: String): Flow<List<Item>> = live(items(code), ::toItem)
+
+    /** Eenmalig ophalen (voor widget en achtergrondcontrole). Valt terug op de cache zonder internet. */
+    private suspend fun <T> fetch(q: com.google.firebase.firestore.Query, map: (DocumentSnapshot) -> T): List<T> {
+        val snap = withTimeoutOrNull(8000) { runCatching { q.get().await() }.getOrNull() }
+            ?: runCatching { q.get(Source.CACHE).await() }.getOrNull()
+        return snap?.documents?.map(map) ?: emptyList()
+    }
+
+    suspend fun fetchLists(code: String): List<ShopList> = fetch(lists(code), ::toList)
+    suspend fun fetchItems(code: String): List<Item> = fetch(items(code), ::toItem)
+
+    suspend fun updateItemAwait(code: String, id: String, fields: Map<String, Any>) {
+        val task = items(code).document(id).update(fields)
+        withTimeoutOrNull(4000) { runCatching { task.await() } }
     }
 
     fun historyFlow(code: String): Flow<List<HistoryEntry>> = live(history(code)) { d ->
@@ -128,11 +152,16 @@ class Repo {
     private fun itemMap(i: Item): Map<String, Any> = mapOf(
         "listId" to i.listId, "name" to i.name, "category" to i.category, "qty" to i.qty,
         "unit" to i.unit, "checked" to i.checked, "checkedAt" to i.checkedAt, "createdAt" to i.createdAt,
+        "byUid" to i.byUid, "byName" to i.byName, "addedAt" to i.addedAt,
     )
 
-    fun addItem(code: String, listId: String, name: String, category: Int, qty: Long, unit: String) {
+    fun addItem(code: String, listId: String, name: String, category: Int, qty: Long, unit: String, byName: String) {
         val ref = items(code).document()
-        restoreItem(code, Item(ref.id, listId, name, category, qty, unit, false, 0, System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        restoreItem(
+            code,
+            Item(ref.id, listId, name, category, qty, unit, false, 0, now, uid() ?: "", byName, now),
+        )
     }
 
     fun restoreItem(code: String, item: Item) {

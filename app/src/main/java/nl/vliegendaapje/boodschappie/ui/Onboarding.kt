@@ -29,6 +29,9 @@ fun OnboardingScreen(vm: MainViewModel) {
     val message by vm.message.collectAsStateWithLifecycle()
     var joining by rememberSaveable { mutableStateOf(false) }
     var code by rememberSaveable { mutableStateOf("") }
+    val savedName by vm.myName.collectAsStateWithLifecycle()
+    var name by rememberSaveable { mutableStateOf(savedName) }
+    val nameOk = name.isNotBlank()
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -56,12 +59,23 @@ fun OnboardingScreen(vm: MainViewModel) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(32.dp))
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Jouw naam") },
+                placeholder = { Text("Je voornaam") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(16.dp))
 
             if (!joining) {
                 Button(
-                    onClick = { vm.create() },
-                    enabled = !busy,
+                    onClick = { vm.setName(name); vm.create() },
+                    enabled = !busy && nameOk,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                 ) { Text("Nieuwe lijst beginnen", style = MaterialTheme.typography.titleMedium) }
                 Spacer(Modifier.height(12.dp))
@@ -83,13 +97,13 @@ fun OnboardingScreen(vm: MainViewModel) {
                         keyboardType = KeyboardType.Ascii,
                         imeAction = ImeAction.Done,
                     ),
-                    keyboardActions = KeyboardActions(onDone = { vm.join(code) }),
+                    keyboardActions = KeyboardActions(onDone = { if (nameOk) { vm.setName(name); vm.join(code) } }),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(16.dp))
                 Button(
-                    onClick = { vm.join(code) },
-                    enabled = !busy && Codes.clean(code).length == 8,
+                    onClick = { vm.setName(name); vm.join(code) },
+                    enabled = !busy && nameOk && Codes.clean(code).length == 8,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                 ) { Text("Koppelen", style = MaterialTheme.typography.titleMedium) }
                 TextButton(onClick = { joining = false; vm.message.value = null }) { Text("Terug") }

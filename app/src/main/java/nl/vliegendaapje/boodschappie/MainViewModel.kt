@@ -6,6 +6,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import nl.vliegendaapje.boodschappie.data.VoiceParser
+import nl.vliegendaapje.boodschappie.widget.BoodschappieWidget
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,7 +38,7 @@ import nl.vliegendaapje.boodschappie.data.Suggest
 import nl.vliegendaapje.boodschappie.data.Suggestion
 import nl.vliegendaapje.boodschappie.data.Catalog
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("boodschappie", Context.MODE_PRIVATE)
@@ -42,6 +50,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val accessError = MutableStateFlow(false)
     val selected = MutableStateFlow(prefs.getString(KEY_SEL, ALL) ?: ALL)
     val addTarget = MutableStateFlow(prefs.getString(KEY_TARGET, null))
+    val myName = MutableStateFlow(prefs.getString(KEY_NAME, "") ?: "")
+    val notify = MutableStateFlow(prefs.getBoolean(KEY_NOTIFY, true))
+
+    /** Doellijst voor het snelle invoervenster vanaf de widget (null = standaard). */
+    var quickTarget: String? = null
 
     private fun <T> live(source: (String) -> Flow<List<T>>): StateFlow<List<T>> =
         household.flatMapLatest { code ->
@@ -60,6 +73,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val lists: StateFlow<List<ShopList>> = live { repo.listsFlow(it) }
     val items: StateFlow<List<Item>> = live { repo.itemsFlow(it) }
     val history: StateFlow<List<HistoryEntry>> = live { repo.historyFlow(it) }
+
+    init {
+        // widget bijwerken zodra de lijst verandert
+        viewModelScope.launch {
+            items.drop(1).debounce(1200).collect {
+                runCatching { BoodschappieWidget().updateAll(getApplication()) }
+            }
+        }
+    }
+
+    fun setName(name: String) {
+        val n = name.trim()
+        myName.value = n
+        prefs.edit().putString(KEY_NAME, n).apply()
+    }
+
+    fun setNotify(on: Boolean) {
+        notify.value = on
+        prefs.edit().putBoolean(KEY_NOTIFY, on).apply()
+    }
 
     // ---------- koppelen ----------
 
@@ -122,6 +155,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun effectiveTarget(): String? {
         val all = lists.value
+        quickTarget?.let { q -> if (all.any { it.id == q }) return q }
         val sel = selected.value
         if (sel != ALL && all.any { it.id == sel }) return sel
         return addTarget.value?.takeIf { t -> all.any { it.id == t } } ?: all.minByOrNull { it.order }?.id
@@ -146,13 +180,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun addSuggestion(s: Suggestion) = addItem(s.name, s.category, s.qty, s.unit)
 
+    /** Ingesproken tekst -> losse producten. Geeft de toegevoegde regels terug. */
+    fun addSpoken(spoken: String): List<String> {
+        val parts = VoiceParser.split(spoken)
+        parts.forEach { addFromText(it) }
+        return parts
+    }
+
+    /** Wacht (max. 6 s) tot de lijsten geladen zijn, voor het snelle venster. */
+    suspend fun awaitReady() {
+        withTimeoutOrNull(6000) { lists.first { it.isNotEmpty() } }
+    }
+
     private fun addItem(name: String, category: Int, qty: Long, unit: String) {
         val code = household.value ?: return
         val listId = effectiveTarget() ?: repo.addList(code, "Boodschappen", 0)
         val existing = items.value.firstOrNull { it.listId == listId && Suggest.norm(it.name) == Suggest.norm(name) }
+        val now = System.currentTimeMillis()
+        val author = mapOf("byUid" to (repo.uid() ?: ""), "byName" to myName.value, "addedAt" to now)
         when {
-            existing == null -> repo.addItem(code, listId, name, category, qty, unit)
-            existing.checked -> repo.updateItem(code, existing.id, mapOf("checked" to false, "qty" to qty, "unit" to unit))
+            existing == null -> repo.addItem(code, listId, name, category, qty, unit, myName.value)
+            existing.checked -> repo.updateItem(code, existing.id, mapOf("checked" to false, "qty" to qty, "unit" to unit) + author)
             existing.unit == unit -> repo.updateItem(code, existing.id, mapOf("qty" to existing.qty + qty))
             else -> repo.updateItem(code, existing.id, mapOf("qty" to qty, "unit" to unit))
         }
@@ -227,5 +275,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private const val KEY_HH = "household"
         private const val KEY_SEL = "selected"
         private const val KEY_TARGET = "addTarget"
+        const val KEY_NAME = "name"
+        const val KEY_NOTIFY = "notify"
     }
 }

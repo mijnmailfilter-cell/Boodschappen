@@ -44,6 +44,12 @@ import nl.vliegendaapje.boodschappie.data.QtyParser
 import nl.vliegendaapje.boodschappie.data.ShopList
 import nl.vliegendaapje.boodschappie.data.Suggest
 import nl.vliegendaapje.boodschappie.data.Suggestion
+import nl.vliegendaapje.boodschappie.speechIntent
+import nl.vliegendaapje.boodschappie.widget.initialColor
+import android.app.Activity
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 // ---------------------------------------------------------------- product-rij
 
@@ -135,6 +141,10 @@ fun ItemRow(
                     )
                 }
             }
+            if (item.initial.isNotEmpty()) {
+                InitialBubble(item.initial, item.byName, faded = item.checked)
+                Spacer(Modifier.width(6.dp))
+            }
             if (item.checked) {
                 Text(
                     Qty.label(item.qty, item.unit),
@@ -146,6 +156,17 @@ fun ItemRow(
                 Stepper(item.qty, item.unit, onStep, onEdit)
             }
         }
+    }
+}
+
+@Composable
+fun InitialBubble(initial: String, name: String, faded: Boolean = false) {
+    val c = initialColor(name)
+    Box(
+        Modifier.size(22.dp).clip(CircleShape).background(if (faded) c.copy(alpha = 0.4f) else c),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(initial, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -237,8 +258,13 @@ fun AddBar(
     onAddText: (String) -> Unit,
     onAddSuggestion: (Suggestion) -> Unit,
     onTarget: (String) -> Unit,
+    onSpoken: (String) -> Unit,
 ) {
     var text by rememberSaveable { mutableStateOf("") }
+    val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val spoken = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (res.resultCode == Activity.RESULT_OK && !spoken.isNullOrBlank()) onSpoken(spoken)
+    }
     var focused by remember { mutableStateOf(false) }
     val parsed = remember(text) { QtyParser.parse(text) }
     val suggestions = remember(parsed.name, history) { Suggest.search(parsed.name, history) }
@@ -342,12 +368,18 @@ fun AddBar(
                     keyboardActions = KeyboardActions(onDone = { submit() }),
                     modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
                 )
-                Spacer(Modifier.width(10.dp))
-                FilledIconButton(
-                    onClick = { submit() },
-                    enabled = text.isNotBlank(),
-                    modifier = Modifier.size(54.dp),
-                ) { Icon(Icons.Filled.Add, "Toevoegen") }
+                Spacer(Modifier.width(8.dp))
+                if (text.isBlank()) {
+                    FilledTonalIconButton(
+                        onClick = { runCatching { voiceLauncher.launch(speechIntent()) } },
+                        modifier = Modifier.size(54.dp),
+                    ) { Text("🎤", fontSize = 22.sp) }
+                } else {
+                    FilledIconButton(
+                        onClick = { submit() },
+                        modifier = Modifier.size(54.dp),
+                    ) { Icon(Icons.Filled.Add, "Toevoegen") }
+                }
             }
         }
     }
@@ -479,20 +511,26 @@ private fun SectionTitle(text: String) {
 // ---------------------------------------------------------------- dialogen
 
 @Composable
-fun NameDialog(title: String, initial: String, confirm: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+fun NameDialog(title: String, initial: String, confirm: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit, placeholder: String = "Bijv. Drogist", message: String? = null) {
     var value by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
+          Column {
+            if (message != null) {
+                Text(message, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+            }
             OutlinedTextField(
                 value = value,
                 onValueChange = { value = it },
                 singleLine = true,
-                placeholder = { Text("Bijv. Drogist") },
+                placeholder = { Text(placeholder) },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (value.isNotBlank()) onConfirm(value) }),
             )
+          }
         },
         confirmButton = { TextButton(onClick = { onConfirm(value) }, enabled = value.isNotBlank()) { Text(confirm) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuleren") } },

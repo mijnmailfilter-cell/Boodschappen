@@ -19,6 +19,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import nl.vliegendaapje.boodschappie.MainViewModel
 import nl.vliegendaapje.boodschappie.data.ALL
 import nl.vliegendaapje.boodschappie.data.Categories
@@ -40,6 +48,22 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
     val selectedRaw by vm.selected.collectAsStateWithLifecycle()
     val addTarget by vm.addTarget.collectAsStateWithLifecycle()
     val accessError by vm.accessError.collectAsStateWithLifecycle()
+    val myName by vm.myName.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // toestemming voor meldingen (Android 13+), één keer vragen
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            val p = context.getSharedPreferences("boodschappie", Context.MODE_PRIVATE)
+            if (!p.getBoolean("askedNotif", false)) {
+                p.edit().putBoolean("askedNotif", true).apply()
+                notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -121,6 +145,13 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
                 onAddText = vm::addFromText,
                 onAddSuggestion = vm::addSuggestion,
                 onTarget = vm::setTarget,
+                onSpoken = { spoken ->
+                    val added = vm.addSpoken(spoken)
+                    if (added.isNotEmpty()) scope.launch {
+                        snackbar.currentSnackbarData?.dismiss()
+                        snackbar.showSnackbar("Toegevoegd: " + added.joinToString(", "))
+                    }
+                },
             )
         },
     ) { padding ->
@@ -242,6 +273,18 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
                 editing = null
                 deleteWithUndo(item)
             },
+        )
+    }
+
+    if (myName.isBlank()) {
+        NameDialog(
+            title = "Hoe heet je?",
+            initial = "",
+            confirm = "Opslaan",
+            placeholder = "Je voornaam",
+            message = "Je initiaal komt klein bij de producten die jij toevoegt, zodat jullie zien wie wat op de lijst zette.",
+            onConfirm = { vm.setName(it) },
+            onDismiss = { },
         )
     }
 

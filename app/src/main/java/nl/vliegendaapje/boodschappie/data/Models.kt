@@ -14,7 +14,12 @@ data class Item(
     val checked: Boolean,
     val checkedAt: Long,
     val createdAt: Long,
-)
+    val byUid: String = "",
+    val byName: String = "",
+    val addedAt: Long = createdAt,
+) {
+    val initial: String get() = byName.trim().take(1).uppercase()
+}
 
 data class HistoryEntry(
     val key: String,

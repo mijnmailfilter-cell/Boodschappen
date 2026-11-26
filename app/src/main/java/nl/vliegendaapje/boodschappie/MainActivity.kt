@@ -16,12 +16,26 @@ import nl.vliegendaapje.boodschappie.ui.BoodschappieTheme
 import nl.vliegendaapje.boodschappie.ui.MainScreen
 import nl.vliegendaapje.boodschappie.ui.OnboardingScreen
 import nl.vliegendaapje.boodschappie.ui.SettingsScreen
+import nl.vliegendaapje.boodschappie.widget.Notifier
+import nl.vliegendaapje.boodschappie.widget.SyncWorker
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        Notifier.ensureChannel(this)
+        SyncWorker.schedule(this)
         setContent { BoodschappieTheme { App() } }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        SyncWorker.markSeen(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        SyncWorker.markSeen(this)
     }
 }
 
