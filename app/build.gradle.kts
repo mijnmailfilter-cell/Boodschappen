@@ -22,9 +22,10 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("boodschappie.keystore")
-            storePassword = "Bdsch4ppie2026"
+            // wachtwoord komt uit de GitHub-kluis (secret SIGNING_PASSWORD)
+            storePassword = System.getenv("SIGNING_PASSWORD")
             keyAlias = "boodschappie"
-            keyPassword = "Bdsch4ppie2026"
+            keyPassword = System.getenv("SIGNING_PASSWORD")
         }
     }
 

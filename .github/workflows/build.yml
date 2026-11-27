@@ -33,8 +33,22 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Ondertekeningssleutel ontsleutelen
+        if: steps.cfg.outputs.ok == 'true'
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_PASSWORD" ]; then
+            echo "::error::Secret SIGNING_PASSWORD ontbreekt (Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -pass env:SIGNING_PASSWORD \
+            -in app/boodschappie.keystore.enc -out app/boodschappie.keystore
+
       - name: Build
         if: steps.cfg.outputs.ok == 'true'
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: gradle :app:assembleRelease --no-daemon --stacktrace
 
       - name: APK klaarzetten
