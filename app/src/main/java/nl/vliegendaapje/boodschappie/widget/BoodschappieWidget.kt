@@ -223,11 +223,28 @@ private fun WidgetContent(context: Context, snap: WidgetSnapshot) {
                 }
                 if (checked.isNotEmpty()) {
                     item(itemId = -1L) {
-                        Text(
-                            "✓  In het mandje (${checked.size})",
-                            style = TextStyle(color = cDim, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                            modifier = GlanceModifier.padding(start = 4.dp, top = 10.dp, bottom = 3.dp),
-                        )
+                        Row(
+                            GlanceModifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "✓  In het mandje (${checked.size})",
+                                style = TextStyle(color = cDim, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                                modifier = GlanceModifier.defaultWeight(),
+                            )
+                            Box(
+                                GlanceModifier.size(32.dp).cornerRadius(16.dp)
+                                    .clickable(actionRunCallback<ClearCheckedAction>(actionParametersOf(P_LIST to listId))),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Image(
+                                    provider = ImageProvider(R.drawable.ic_trash),
+                                    contentDescription = "Afgevinkte wissen",
+                                    colorFilter = ColorFilter.tint(cDim),
+                                    modifier = GlanceModifier.size(18.dp),
+                                )
+                            }
+                        }
                     }
                     items(checked, itemId = { it.id.hashCode().toLong() }) { item ->
                         WidgetRow(item, null)
@@ -311,6 +328,19 @@ class ToggleItemAction : ActionCallback {
         val checked = parameters[P_CHECKED] ?: return
         val code = context.getSharedPreferences("boodschappie", Context.MODE_PRIVATE).getString("household", null) ?: return
         Repo().updateItemAwait(code, id, mapOf("checked" to checked, "checkedAt" to System.currentTimeMillis()))
+        WidgetRefresher.refreshAll(context)
+    }
+}
+
+class ClearCheckedAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val listId = parameters[P_LIST] ?: ALL
+        val code = context.getSharedPreferences("boodschappie", Context.MODE_PRIVATE).getString("household", null) ?: return
+        val repo = Repo()
+        val ids = repo.fetchItems(code)
+            .filter { it.checked && (listId == ALL || it.listId == listId) }
+            .map { it.id }
+        if (ids.isNotEmpty()) repo.deleteItemsAwait(code, ids)
         WidgetRefresher.refreshAll(context)
     }
 }

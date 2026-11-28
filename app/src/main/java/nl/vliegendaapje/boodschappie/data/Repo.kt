@@ -180,6 +180,14 @@ class Repo {
         }
     }
 
+    suspend fun deleteItemsAwait(code: String, ids: List<String>) {
+        ids.chunked(450).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(items(code).document(it)) }
+            withTimeoutOrNull(4000) { runCatching { batch.commit().await() } }
+        }
+    }
+
     fun restoreItems(code: String, list: List<Item>) {
         list.chunked(450).forEach { chunk ->
             val batch = db.batch()
